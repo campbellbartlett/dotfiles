@@ -237,6 +237,43 @@ install_yazi() {
   trap - RETURN
 }
 
+install_bazel() {
+  if have bazel; then
+    log "bazel already installed: $(bazel --version 2>/dev/null || echo installed)"
+    return
+  fi
+
+  local arch url tmpdir
+
+  case "$(uname -m)" in
+  x86_64) arch="amd64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *)
+    echo "Unsupported architecture for Bazelisk: $(uname -m)" >&2
+    return 1
+    ;;
+  esac
+
+  # Install Bazel via Bazelisk so repos can pin an appropriate Bazel version
+  # in .bazelversion. This is safer than using a distro Bazel package for
+  # Java 21 toolchain settings such as remotejdk_21.
+  url="https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${arch}"
+
+  log "Installing Bazelisk"
+
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  curl -fL "$url" -o "$tmpdir/bazelisk"
+  chmod +x "$tmpdir/bazelisk"
+
+  need_sudo install -m 0755 "$tmpdir/bazelisk" /usr/local/bin/bazelisk
+  need_sudo ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
+
+  rm -rf "$tmpdir"
+  trap - RETURN
+}
+
 stow_dotfiles() {
   local repo_root backup_root
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -304,6 +341,7 @@ main() {
   install_nvim
   install_starship
   install_yazi
+  install_bazel
   install_tpm
   stow_dotfiles
   install_lazyvim
@@ -316,5 +354,6 @@ main() {
   have npm && printf '  npm: %s\n' "$(npm -v)"
   have codex && printf '  codex: installed\n'
   have yazi && printf '  yazi: %s\n' "$(yazi --version 2>/dev/null || echo installed)"
+  have bazel && printf '  bazel: %s\n' "$(bazel --version 2>/dev/null || echo installed)"
 }
 main "$@"
