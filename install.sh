@@ -34,7 +34,7 @@ ensure_apt_updated() {
 install_base_helpers() {
   ensure_apt_updated
   log "Installing base helpers"
-  apt_install ca-certificates curl gpg unzip xz-utils
+  apt_install bc bubblewrap ca-certificates curl gpg stow unzip xz-utils zsh-autosuggestions zsh-syntax-highlighting
 }
 
 install_gh() {
@@ -80,6 +80,50 @@ install_codex() {
 
   log "Installing Codex CLI"
   need_sudo npm install -g @openai/codex
+}
+
+install_starship() {
+  if have starship; then
+    log "starship already installed: $(starship --version)"
+    return
+  fi
+
+  log "Installing starship"
+  curl -sS https://starship.rs/install.sh | sh -s -- -y
+}
+
+install_tpm() {
+  local tpm_dir
+  tpm_dir="${HOME}/.tmux/plugins/tpm"
+
+  if [[ -d "$tpm_dir" ]]; then
+    log "TPM already installed"
+    return
+  fi
+
+  if ! have git; then
+    echo "git is required to bootstrap TPM but is not installed." >&2
+    return 1
+  fi
+
+  log "Installing tmux plugin manager (TPM)"
+  mkdir -p "${HOME}/.tmux/plugins"
+  git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+}
+
+ensure_tmux_session() {
+  if ! have tmux; then
+    echo "tmux is required to create the default session but is not installed." >&2
+    return 1
+  fi
+
+  if tmux has-session -t campbell 2>/dev/null; then
+    log "tmux session 'campbell' already exists"
+    return
+  fi
+
+  log "Creating tmux session 'campbell'"
+  tmux new-session -d -s campbell
 }
 
 install_yazi() {
@@ -159,8 +203,33 @@ stow_dotfiles() {
     return
   fi
 
+  remove_stow_conflicts() {
+    local package_name package_root rel_path target
+    package_name="$1"
+    package_root="$repo_root/$package_name"
+
+    while IFS= read -r -d '' path; do
+      rel_path="${path#"$package_root"/}"
+      target="$HOME/$rel_path"
+
+      if [[ -d "$path" ]]; then
+        if [[ -e "$target" && ! -d "$target" ]]; then
+          rm -rf "$target"
+        fi
+        continue
+      fi
+
+      if [[ -e "$target" || -L "$target" ]]; then
+        rm -rf "$target"
+      fi
+    done < <(find "$package_root" -mindepth 1 -print0)
+  }
+
   (
     cd "$repo_root"
+    for dir in "${dirs[@]}"; do
+      remove_stow_conflicts "$dir"
+    done
     stow --target="$HOME" "${dirs[@]}"
   )
 }
@@ -169,8 +238,11 @@ main() {
   install_base_helpers
   install_gh
   install_codex
+  install_starship
   install_yazi
-  #stow_dotfiles
+  install_tpm
+  stow_dotfiles
+  ensure_tmux_session
 
   log "Done"
   printf 'Versions:\n'
