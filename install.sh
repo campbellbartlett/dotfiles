@@ -56,6 +56,12 @@ install_gh() {
 
   ensure_apt_updated
   apt_install gh
+
+  # set git identity if not already set
+  if ! git config --global user.email >/dev/null; then
+    git config --global user.name "Campbell Bartlett"
+    git config --global user.email "campbell.bartlett@gmail.com"
+  fi
 }
 
 install_nodejs() {
@@ -151,6 +157,9 @@ install_tpm() {
   log "Installing tmux plugin manager (TPM)"
   mkdir -p "${HOME}/.tmux/plugins"
   git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+
+  # install plugins
+  ~/.tmux/plugins/tpm/bin/install_plugins
 }
 
 install_lazyvim() {
