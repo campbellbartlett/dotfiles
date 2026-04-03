@@ -157,9 +157,6 @@ install_tpm() {
   log "Installing tmux plugin manager (TPM)"
   mkdir -p "${HOME}/.tmux/plugins"
   git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
-
-  # install plugins
-  ~/.tmux/plugins/tpm/bin/install_plugins
 }
 
 install_lazyvim() {
@@ -177,6 +174,9 @@ ensure_tmux_session() {
     echo "tmux is required to create the default session but is not installed." >&2
     return 1
   fi
+
+  # install plugins
+  ~/.tmux/plugins/tpm/bin/install_plugins
 
   if tmux has-session -t campbell 2>/dev/null; then
     log "tmux session 'campbell' already exists"
