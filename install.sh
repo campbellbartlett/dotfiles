@@ -283,6 +283,12 @@ install_pi() {
   log "Installing pi coding agent"
 
   if have pnpm; then
+    # Ensure PNPM_HOME and global bin dir are configured
+    if [[ -z "${PNPM_HOME:-}" ]]; then
+      pnpm setup 2>/dev/null || true
+      export PNPM_HOME="${HOME}/.local/share/pnpm"
+      export PATH="$PNPM_HOME:$PATH"
+    fi
     pnpm install -g @mariozechner/pi-coding-agent
   else
     npm install -g @mariozechner/pi-coding-agent
