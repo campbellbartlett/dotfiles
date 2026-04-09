@@ -250,6 +250,39 @@ install_difftastic() {
   esac
 }
 
+install_tree_sitter() {
+  if have tree-sitter; then
+    log "tree-sitter already installed"
+    return
+  fi
+
+  log "Installing tree-sitter CLI"
+
+  local arch version url tmpdir
+
+  case "$(uname -m)" in
+  x86_64) arch="x64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *)
+    echo "Unsupported architecture for tree-sitter: $(uname -m)" >&2
+    return 1
+    ;;
+  esac
+
+  version="$(curl -fsSL https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')"
+  url="https://github.com/tree-sitter/tree-sitter/releases/download/${version}/tree-sitter-cli-linux-${arch}.zip"
+
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  curl -fL "$url" -o "$tmpdir/tree-sitter.zip"
+  unzip -q "$tmpdir/tree-sitter.zip" -d "$tmpdir"
+  need_sudo install -m 0755 "$tmpdir/tree-sitter" /usr/local/bin/tree-sitter
+
+  rm -rf "$tmpdir"
+  trap - RETURN
+}
+
 install_tpm() {
   local tpm_dir
   tpm_dir="${HOME}/.tmux/plugins/tpm"
@@ -433,6 +466,7 @@ main() {
   install_nvim
   install_starship
   install_difftastic
+  install_tree_sitter
   install_yazi
   install_tpm
   set_default_shell
