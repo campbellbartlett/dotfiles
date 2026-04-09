@@ -1,0 +1,15 @@
+[user]
+    name = Campbell Bartlett
+    email = campbell.bartlett@gmail.com
+
+[color]
+    ui = auto
+
+[core]
+    editor = vim
+    excludesfile = ~/.gitignore
+
+[alias]
+    dlog = -c diff.external=difft log --ext-diff
+    dshow = -c diff.external=difft show --ext-diff
+    ddiff = -c diff.external=difft diff

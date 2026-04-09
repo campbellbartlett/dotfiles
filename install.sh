@@ -19,22 +19,73 @@ need_sudo() {
   fi
 }
 
-apt_install() {
-  need_sudo apt-get install -y "$@"
+# ---------------------------------------------------------------------------
+# Package manager abstraction
+# ---------------------------------------------------------------------------
+# Prefer nix if available (e.g. Canva devboxes), fall back to apt.
+
+PKG_MANAGER=""
+
+detect_pkg_manager() {
+  if have nix-env; then
+    PKG_MANAGER="nix"
+  elif have apt-get; then
+    PKG_MANAGER="apt"
+  else
+    echo "No supported package manager found (need nix or apt)" >&2
+    exit 1
+  fi
+  log "Using package manager: $PKG_MANAGER"
 }
 
+apt_updated=false
+
 ensure_apt_updated() {
-  if [[ ! -f /tmp/.dotfiles-apt-updated ]]; then
+  if [[ "$apt_updated" == false ]]; then
     log "Updating apt package index"
     need_sudo apt-get update
-    touch /tmp/.dotfiles-apt-updated
+    apt_updated=true
   fi
 }
 
+pkg_install() {
+  # Usage: pkg_install <nix-pkg> <apt-pkg> [apt-pkg2 ...]
+  # First arg is the nixpkgs attribute, rest are apt package names.
+  local nix_pkg="$1"; shift
+  local apt_pkgs=("$@")
+
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install "nixpkgs#${nix_pkg}" 2>/dev/null || true
+      ;;
+    apt)
+      ensure_apt_updated
+      need_sudo apt-get install -y "${apt_pkgs[@]}"
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Installers
+# ---------------------------------------------------------------------------
+
 install_base_helpers() {
-  ensure_apt_updated
   log "Installing base helpers"
-  apt_install bc build-essential bubblewrap ca-certificates curl gpg stow unzip xz-utils zsh-autosuggestions zsh-syntax-highlighting
+
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile upgrade '.*' 2>/dev/null || true
+      nix profile install \
+        nixpkgs#git nixpkgs#curl nixpkgs#wget nixpkgs#stow \
+        nixpkgs#ripgrep nixpkgs#tmux 2>/dev/null || true
+      ;;
+    apt)
+      ensure_apt_updated
+      need_sudo apt-get install -y \
+        bc build-essential bubblewrap ca-certificates curl git gpg stow \
+        tmux ripgrep unzip xz-utils zsh zsh-autosuggestions zsh-syntax-highlighting
+      ;;
+  esac
 }
 
 install_gh() {
@@ -44,24 +95,26 @@ install_gh() {
   fi
 
   log "Installing GitHub CLI"
-  need_sudo mkdir -p /etc/apt/keyrings
 
-  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
-    need_sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#gh 2>/dev/null || true
+      ;;
+    apt)
+      need_sudo mkdir -p /etc/apt/keyrings
 
-  need_sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+        need_sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
 
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
-    need_sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+      need_sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
 
-  ensure_apt_updated
-  apt_install gh
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+        need_sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
 
-  # set git identity if not already set
-  if ! git config --global user.email >/dev/null; then
-    git config --global user.name "Campbell Bartlett"
-    git config --global user.email "campbell.bartlett@gmail.com"
-  fi
+      ensure_apt_updated
+      need_sudo apt-get install -y gh
+      ;;
+  esac
 }
 
 install_nodejs() {
@@ -71,21 +124,17 @@ install_nodejs() {
   fi
 
   log "Installing Node.js 22"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | need_sudo bash -
-  ensure_apt_updated
-  apt_install nodejs
-}
 
-install_codex() {
-  if have codex; then
-    log "codex already installed"
-    return
-  fi
-
-  install_nodejs
-
-  log "Installing Codex CLI"
-  need_sudo npm install -g @openai/codex
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#nodejs_22 2>/dev/null || true
+      ;;
+    apt)
+      curl -fsSL https://deb.nodesource.com/setup_22.x | need_sudo bash -
+      ensure_apt_updated
+      need_sudo apt-get install -y nodejs
+      ;;
+  esac
 }
 
 install_starship() {
@@ -95,11 +144,19 @@ install_starship() {
   fi
 
   log "Installing starship"
-  curl -sS https://starship.rs/install.sh | sh -s -- -y
+
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#starship 2>/dev/null || true
+      ;;
+    apt)
+      curl -sS https://starship.rs/install.sh | sh -s -- -y
+      ;;
+  esac
 }
 
 install_nvim() {
-  local arch version asset url tmpdir install_root nvim_version nvim_minor
+  local nvim_version nvim_minor
 
   if have nvim; then
     nvim_version="$(nvim --version | head -n1 | awk '{print $2}')"
@@ -110,34 +167,87 @@ install_nvim() {
     fi
   fi
 
-  case "$(uname -m)" in
-  x86_64) arch="x86_64" ;;
-  aarch64 | arm64) arch="arm64" ;;
-  *)
-    echo "Unsupported architecture for Neovim: $(uname -m)" >&2
-    return 1
-    ;;
+  log "Installing Neovim"
+
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#neovim 2>/dev/null || true
+      ;;
+    apt)
+      local arch version asset url tmpdir install_root
+
+      case "$(uname -m)" in
+      x86_64) arch="x86_64" ;;
+      aarch64 | arm64) arch="arm64" ;;
+      *)
+        echo "Unsupported architecture for Neovim: $(uname -m)" >&2
+        return 1
+        ;;
+      esac
+
+      version="${NVIM_VERSION:-v0.11.5}"
+      asset="nvim-linux-${arch}.tar.gz"
+      url="https://github.com/neovim/neovim/releases/download/${version}/${asset}"
+
+      tmpdir="$(mktemp -d)"
+      trap 'rm -rf "$tmpdir"' RETURN
+
+      curl -fL "$url" -o "$tmpdir/$asset"
+      tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+
+      install_root="/opt/nvim-linux-${arch}"
+      need_sudo rm -rf "$install_root"
+      need_sudo mv "$tmpdir/nvim-linux-${arch}" "$install_root"
+      need_sudo ln -sf "$install_root/bin/nvim" /usr/local/bin/nvim
+
+      rm -rf "$tmpdir"
+      trap - RETURN
+      ;;
   esac
+}
 
-  version="${NVIM_VERSION:-v0.11.5}"
-  asset="nvim-linux-${arch}.tar.gz"
-  url="https://github.com/neovim/neovim/releases/download/${version}/${asset}"
+install_difftastic() {
+  if have difft; then
+    log "difftastic already installed"
+    return
+  fi
 
-  log "Installing Neovim ${version}"
+  log "Installing difftastic"
 
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#difftastic 2>/dev/null || true
+      ;;
+    apt)
+      local arch version url tmpdir
 
-  curl -fL "$url" -o "$tmpdir/$asset"
-  tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+      case "$(uname -m)" in
+      x86_64) arch="x86_64-unknown-linux-gnu" ;;
+      aarch64 | arm64) arch="aarch64-unknown-linux-gnu" ;;
+      *)
+        echo "Unsupported architecture for difftastic: $(uname -m)" >&2
+        return 1
+        ;;
+      esac
 
-  install_root="/opt/nvim-linux-${arch}"
-  need_sudo rm -rf "$install_root"
-  need_sudo mv "$tmpdir/nvim-linux-${arch}" "$install_root"
-  need_sudo ln -sf "$install_root/bin/nvim" /usr/local/bin/nvim
+      version="${DIFFT_VERSION:-latest}"
+      if [[ "$version" == "latest" ]]; then
+        version="$(curl -fsSL https://api.github.com/repos/Wilfred/difftastic/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')"
+      fi
 
-  rm -rf "$tmpdir"
-  trap - RETURN
+      url="https://github.com/Wilfred/difftastic/releases/download/${version}/difft-${arch}.tar.gz"
+
+      tmpdir="$(mktemp -d)"
+      trap 'rm -rf "$tmpdir"' RETURN
+
+      curl -fL "$url" -o "$tmpdir/difft.tar.gz"
+      tar -xzf "$tmpdir/difft.tar.gz" -C "$tmpdir"
+      need_sudo install -m 0755 "$tmpdir/difft" /usr/local/bin/difft
+
+      rm -rf "$tmpdir"
+      trap - RETURN
+      ;;
+  esac
 }
 
 install_tpm() {
@@ -166,25 +276,7 @@ install_lazyvim() {
   fi
 
   log "Bootstrapping LazyVim"
-  nvim --headless '+lua require("lazy").sync({ wait = true })' +qa
-}
-
-ensure_tmux_session() {
-  if ! have tmux; then
-    echo "tmux is required to create the default session but is not installed." >&2
-    return 1
-  fi
-
-  # install plugins
-  ~/.tmux/plugins/tpm/bin/install_plugins
-
-  if tmux has-session -t campbell 2>/dev/null; then
-    log "tmux session 'campbell' already exists"
-    return
-  fi
-
-  log "Creating tmux session 'campbell'"
-  tmux new-session -d -s campbell
+  nvim --headless '+lua require("lazy").sync({ wait = true })' +qa 2>/dev/null || true
 }
 
 install_yazi() {
@@ -193,56 +285,87 @@ install_yazi() {
     return
   fi
 
-  local arch version url tmpdir asset
+  log "Installing yazi"
 
-  case "$(uname -m)" in
-  x86_64) arch="x86_64-unknown-linux-gnu" ;;
-  aarch64 | arm64) arch="aarch64-unknown-linux-gnu" ;;
-  *)
-    echo "Unsupported architecture for yazi: $(uname -m)" >&2
-    return 1
-    ;;
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#yazi 2>/dev/null || true
+      ;;
+    apt)
+      local arch version url tmpdir asset
+
+      case "$(uname -m)" in
+      x86_64) arch="x86_64-unknown-linux-gnu" ;;
+      aarch64 | arm64) arch="aarch64-unknown-linux-gnu" ;;
+      *)
+        echo "Unsupported architecture for yazi: $(uname -m)" >&2
+        return 1
+        ;;
+      esac
+
+      version="${YAZI_VERSION:-latest}"
+      if [[ "$version" == "latest" ]]; then
+        url="https://github.com/sxyazi/yazi/releases/latest/download/yazi-${arch}.zip"
+      else
+        url="https://github.com/sxyazi/yazi/releases/download/${version}/yazi-${arch}.zip"
+      fi
+
+      tmpdir="$(mktemp -d)"
+      trap 'rm -rf "$tmpdir"' RETURN
+
+      curl -fL "$url" -o "$tmpdir/yazi.zip"
+      unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
+
+      asset="$(find "$tmpdir" -maxdepth 2 -type f -name yazi | head -n1)"
+      if [[ -z "$asset" ]]; then
+        echo "Could not find yazi binaries in downloaded archive" >&2
+        return 1
+      fi
+
+      local bindir
+      bindir="$(dirname "$asset")"
+
+      need_sudo install -m 0755 "$bindir/yazi" /usr/local/bin/yazi
+      if [[ -f "$bindir/ya" ]]; then
+        need_sudo install -m 0755 "$bindir/ya" /usr/local/bin/ya
+      fi
+
+      rm -rf "$tmpdir"
+      trap - RETURN
+      ;;
   esac
-
-  version="${YAZI_VERSION:-latest}"
-  if [[ "$version" == "latest" ]]; then
-    url="https://github.com/sxyazi/yazi/releases/latest/download/yazi-${arch}.zip"
-  else
-    url="https://github.com/sxyazi/yazi/releases/download/${version}/yazi-${arch}.zip"
-  fi
-
-  log "Installing yazi (${version})"
-
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
-
-  curl -fL "$url" -o "$tmpdir/yazi.zip"
-  unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
-
-  asset="$(find "$tmpdir" -maxdepth 2 -type f \( -name yazi -o -name ya \) | head -n1)"
-  if [[ -z "$asset" ]]; then
-    echo "Could not find yazi binaries in downloaded archive" >&2
-    return 1
-  fi
-
-  local bindir
-  bindir="$(dirname "$asset")"
-
-  need_sudo install -m 0755 "$bindir/yazi" /usr/local/bin/yazi
-  if [[ -f "$bindir/ya" ]]; then
-    need_sudo install -m 0755 "$bindir/ya" /usr/local/bin/ya
-  fi
-
-  rm -rf "$tmpdir"
-  trap - RETURN
 }
 
+set_default_shell() {
+  if ! have zsh; then
+    return
+  fi
+
+  local zsh_path
+  zsh_path="$(command -v zsh)"
+
+  if [[ "$(getent passwd "$(whoami)" | cut -d: -f7)" == "$zsh_path" ]]; then
+    log "zsh is already the default shell"
+    return
+  fi
+
+  log "Setting zsh as default shell"
+  if ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
+    echo "$zsh_path" | need_sudo tee -a /etc/shells >/dev/null
+  fi
+  chsh -s "$zsh_path"
+}
+
+# ---------------------------------------------------------------------------
+# Stow
+# ---------------------------------------------------------------------------
+
 stow_dotfiles() {
-  local repo_root backup_root
+  local repo_root
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
   if ! have stow; then
-    echo "stow is not installed. Put stow in the base image or install it first." >&2
+    echo "stow is not installed." >&2
     return 1
   fi
 
@@ -264,25 +387,26 @@ stow_dotfiles() {
     return
   fi
 
-  backup_root="${HOME}/.dotfiles-backup"
+  local backup_root="${HOME}/.dotfiles-backup"
 
   backup_stow_conflicts() {
-    local package_name package_root rel_path target target_real backup_target
-    package_name="$1"
-    package_root="$repo_root/$package_name"
+    local package_name="$1"
+    local package_root="$repo_root/$package_name"
 
     while IFS= read -r -d '' path; do
-      rel_path="${path#"$package_root"/}"
-      target="$HOME/$rel_path"
+      local rel_path="${path#"$package_root"/}"
+      local target="$HOME/$rel_path"
+      local target_real
       target_real="$(readlink -f "$target" 2>/dev/null || true)"
 
       [[ -e "$target" || -L "$target" ]] || continue
 
+      # Skip if already symlinked correctly
       if [[ -n "$target_real" && "$target_real" == "$path" ]]; then
         continue
       fi
 
-      backup_target="$backup_root/$rel_path"
+      local backup_target="$backup_root/$rel_path"
       mkdir -p "$(dirname "$backup_target")"
       mv "$target" "$backup_target"
     done < <(find "$package_root" -type f -print0)
@@ -297,24 +421,31 @@ stow_dotfiles() {
   )
 }
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 main() {
+  detect_pkg_manager
   install_base_helpers
   install_gh
-  install_codex
+  install_nodejs
   install_nvim
   install_starship
+  install_difftastic
   install_yazi
   install_tpm
+  set_default_shell
   stow_dotfiles
   install_lazyvim
-  ensure_tmux_session
 
   log "Done"
   printf 'Versions:\n'
-  have gh && printf '  gh: %s\n' "$(gh --version | head -n1)"
-  have node && printf '  node: %s\n' "$(node -v)"
-  have npm && printf '  npm: %s\n' "$(npm -v)"
-  have codex && printf '  codex: installed\n'
-  have yazi && printf '  yazi: %s\n' "$(yazi --version 2>/dev/null || echo installed)"
+  have gh       && printf '  gh:        %s\n' "$(gh --version | head -n1)"
+  have node     && printf '  node:      %s\n' "$(node -v)"
+  have nvim     && printf '  nvim:      %s\n' "$(nvim --version | head -n1)"
+  have starship && printf '  starship:  %s\n' "$(starship --version | head -n1)"
+  have difft    && printf '  difft:     %s\n' "$(difft --version 2>/dev/null || echo installed)"
+  have yazi     && printf '  yazi:      %s\n' "$(yazi --version 2>/dev/null || echo installed)"
 }
 main "$@"

@@ -1,44 +1,61 @@
+# Starship prompt configuration
+# Get editor completions based on the config schema
+"$schema" = 'https://starship.rs/config-schema.json'
+
 add_newline = false
-command_timeout = 1000
 
-format = """
-$username\
-$hostname\
-$directory\
-$git_branch\
-$git_status\
-$cmd_duration\
-$character"""
+command_timeout = 2000
 
+# show minimal info
+format = """$directory$git_branch$git_status$character"""
+
+# Replace the '❯' symbol in the prompt with '➜'
 [character]
-success_symbol = "[>](bold green)"
-error_symbol = "[>](bold red)"
-vimcmd_symbol = "[<](bold yellow)"
+success_symbol = "❯ "
+error_symbol = "❯ "
+
+# Disable the package module, hiding it from the prompt completely
+[package]
+disabled = true
+
+# disable noisy modules
+[aws]
+disabled = true
+
+[gcloud]
+disabled = true
+
+[kubernetes]
+disabled = true
+
+[golang]
+disabled = true
+
+[java]
+disabled = true
+
+[nodejs]
+disabled = true
+
+[rust]
+disabled = true
+
+[python]
+disabled = true
+
+[scala]
+disabled = true
+
+[ruby]
+disabled = true
 
 [directory]
-style = "bold blue"
-truncate_to_repo = false
-truncation_length = 4
+style = "blue bold"
+truncate_to_repo = true
 
 [git_branch]
 symbol = " "
-style = "bold mauve"
+style = "green"
 
 [git_status]
-style = "bold peach"
-
-[cmd_duration]
-format = "[$duration]($style) "
-min_time = 500
-style = "bold yellow"
-
-[hostname]
-format = "[@$hostname]($style) "
-ssh_only = true
-style = "bold green"
-
-[username]
-format = "[$user]($style)"
-show_always = true
-style_root = "bold red"
-style_user = "bold teal"
+disabled = true
