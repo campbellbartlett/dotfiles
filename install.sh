@@ -269,6 +269,26 @@ install_tpm() {
   git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
 }
 
+install_pi() {
+  if have pi; then
+    log "pi already installed"
+    return
+  fi
+
+  if ! have pnpm && ! have npm; then
+    echo "pnpm or npm is required to install pi but neither is installed." >&2
+    return 1
+  fi
+
+  log "Installing pi coding agent"
+
+  if have pnpm; then
+    pnpm install -g @mariozechner/pi-coding-agent
+  else
+    npm install -g @mariozechner/pi-coding-agent
+  fi
+}
+
 install_lazyvim() {
   if ! have nvim; then
     echo "nvim is required to bootstrap LazyVim but is not installed." >&2
@@ -435,6 +455,7 @@ main() {
   install_difftastic
   install_yazi
   install_tpm
+  install_pi
   set_default_shell
   stow_dotfiles
   install_lazyvim
