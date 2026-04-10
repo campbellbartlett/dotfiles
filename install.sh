@@ -482,10 +482,11 @@ main() {
     install_starship
     install_difftastic
     install_yazi
-    install_pi
     set_default_shell
   fi
 
+  # Keep pi install outside package-manager block so it still works in Coder-safe mode.
+  install_pi
   stow_dotfiles
   install_tpm
   install_lazyvim
