@@ -19,6 +19,9 @@ need_sudo() {
   fi
 }
 
+# Set DOTFILES_SKIP_PACKAGES=1 to skip all package-manager operations.
+DOTFILES_SKIP_PACKAGES="${DOTFILES_SKIP_PACKAGES:-0}"
+
 # ---------------------------------------------------------------------------
 # Package manager abstraction
 # ---------------------------------------------------------------------------
@@ -452,17 +455,22 @@ stow_dotfiles() {
 # ---------------------------------------------------------------------------
 
 main() {
-  detect_pkg_manager
-  install_base_helpers
-  install_gh
-  install_nodejs
-  install_nvim
-  install_starship
-  install_difftastic
-  install_yazi
+  if [[ "$DOTFILES_SKIP_PACKAGES" == "1" ]]; then
+    log "DOTFILES_SKIP_PACKAGES=1, skipping package installation steps"
+  else
+    detect_pkg_manager
+    install_base_helpers
+    install_gh
+    install_nodejs
+    install_nvim
+    install_starship
+    install_difftastic
+    install_yazi
+    install_pi
+    set_default_shell
+  fi
+
   install_tpm
-  install_pi
-  set_default_shell
   stow_dotfiles
   install_lazyvim
 

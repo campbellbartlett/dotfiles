@@ -21,13 +21,31 @@ chmod +x install.sh
 ./install.sh
 ```
 
-`install.sh` is idempotent — safe to run multiple times. It will:
+`install.sh` is idempotent — safe to run multiple times. By default it will:
 
 1. Install base packages (via nix or apt, whichever is available)
 2. Install tools: gh, node, neovim, starship, difftastic, yazi, tmux TPM
 3. Set zsh as default shell
 4. Symlink all config via `stow`
 5. Bootstrap LazyVim plugins
+
+### Coder-safe mode (skip package installs)
+
+For Coder/devbox environments where package installation is handled by the image,
+use:
+
+```bash
+DOTFILES_SKIP_PACKAGES=1 ~/.dotfiles/install.sh
+```
+
+When `DOTFILES_SKIP_PACKAGES=1`, `install.sh` skips package-manager operations
+(`nix`/`apt`) and still runs configuration/bootstrap steps (`stow`, TPM, LazyVim).
+
+To force package installation again:
+
+```bash
+DOTFILES_SKIP_PACKAGES=0 ~/.dotfiles/install.sh
+```
 
 ## Layering your own specific config
 
