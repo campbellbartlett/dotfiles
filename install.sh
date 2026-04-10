@@ -257,19 +257,32 @@ install_tpm() {
   local tpm_dir
   tpm_dir="${HOME}/.tmux/plugins/tpm"
 
-  if [[ -d "$tpm_dir" ]]; then
-    log "TPM already installed"
-    return
-  fi
-
   if ! have git; then
     echo "git is required to bootstrap TPM but is not installed." >&2
     return 1
   fi
 
-  log "Installing tmux plugin manager (TPM)"
-  mkdir -p "${HOME}/.tmux/plugins"
-  git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+  if [[ ! -d "$tpm_dir" ]]; then
+    log "Installing tmux plugin manager (TPM)"
+    mkdir -p "${HOME}/.tmux/plugins"
+    git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+  else
+    log "TPM already installed"
+  fi
+
+  if ! have tmux; then
+    echo "tmux is required to install TPM plugins but is not installed." >&2
+    return 1
+  fi
+
+  if [[ ! -f "${HOME}/.tmux.conf" ]]; then
+    log "~/.tmux.conf not present yet, skipping TPM plugin bootstrap"
+    return
+  fi
+
+  log "Installing TPM plugins"
+  tmux start-server
+  "${tpm_dir}/bin/install_plugins"
 }
 
 install_pi() {
@@ -473,8 +486,8 @@ main() {
     set_default_shell
   fi
 
-  install_tpm
   stow_dotfiles
+  install_tpm
   install_lazyvim
 
   log "Done"
