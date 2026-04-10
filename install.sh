@@ -59,7 +59,7 @@ pkg_install() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install "nixpkgs#${nix_pkg}" 2>/dev/null || true
+      nix profile install "nixpkgs#${nix_pkg}"
       ;;
     apt)
       ensure_apt_updated
@@ -77,10 +77,10 @@ install_base_helpers() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile upgrade '.*' 2>/dev/null || true
+      nix profile upgrade '.*'
       nix profile install \
         nixpkgs#git nixpkgs#curl nixpkgs#wget nixpkgs#stow \
-        nixpkgs#ripgrep nixpkgs#tmux nixpkgs#tree-sitter 2>/dev/null || true
+        nixpkgs#ripgrep nixpkgs#tmux nixpkgs#tree-sitter
       ;;
     apt)
       ensure_apt_updated
@@ -101,7 +101,7 @@ install_gh() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#gh 2>/dev/null || true
+      nix profile install nixpkgs#gh
       ;;
     apt)
       need_sudo mkdir -p /etc/apt/keyrings
@@ -130,7 +130,7 @@ install_nodejs() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#nodejs_22 2>/dev/null || true
+      nix profile install nixpkgs#nodejs_22
       ;;
     apt)
       curl -fsSL https://deb.nodesource.com/setup_22.x | need_sudo bash -
@@ -150,7 +150,7 @@ install_starship() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#starship 2>/dev/null || true
+      nix profile install nixpkgs#starship
       ;;
     apt)
       curl -sS https://starship.rs/install.sh | sh -s -- -y
@@ -174,7 +174,7 @@ install_nvim() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#neovim 2>/dev/null || true
+      nix profile install nixpkgs#neovim
       ;;
     apt)
       local arch version asset url tmpdir install_root
@@ -219,7 +219,7 @@ install_difftastic() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#difftastic 2>/dev/null || true
+      nix profile install nixpkgs#difftastic
       ;;
     apt)
       local arch version url tmpdir
@@ -288,7 +288,7 @@ install_pi() {
   if have pnpm; then
     # Ensure PNPM_HOME and global bin dir are configured
     if [[ -z "${PNPM_HOME:-}" ]]; then
-      pnpm setup 2>/dev/null || true
+      pnpm setup
       export PNPM_HOME="${HOME}/.local/share/pnpm"
       export PATH="$PNPM_HOME:$PATH"
     fi
@@ -305,7 +305,7 @@ install_lazyvim() {
   fi
 
   log "Bootstrapping LazyVim"
-  nvim --headless '+lua require("lazy").sync({ wait = true })' +qa 2>/dev/null || true
+  nvim --headless '+lua require("lazy").sync({ wait = true })' +qa
 }
 
 install_yazi() {
@@ -318,7 +318,7 @@ install_yazi() {
 
   case "$PKG_MANAGER" in
     nix)
-      nix profile install nixpkgs#yazi 2>/dev/null || true
+      nix profile install nixpkgs#yazi
       ;;
     apt)
       local arch version url tmpdir asset
@@ -379,7 +379,7 @@ set_default_shell() {
   fi
 
   log "Setting zsh as default shell"
-  if ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
+  if [[ ! -f /etc/shells ]] || ! grep -qxF "$zsh_path" /etc/shells; then
     echo "$zsh_path" | need_sudo tee -a /etc/shells >/dev/null
   fi
   chsh -s "$zsh_path"
@@ -426,7 +426,10 @@ stow_dotfiles() {
       local rel_path="${path#"$package_root"/}"
       local target="$HOME/$rel_path"
       local target_real
-      target_real="$(readlink -f "$target" 2>/dev/null || true)"
+      target_real=""
+      if [[ -e "$target" || -L "$target" ]]; then
+        target_real="$(readlink -f "$target")"
+      fi
 
       [[ -e "$target" || -L "$target" ]] || continue
 
@@ -480,7 +483,7 @@ main() {
   have node     && printf '  node:      %s\n' "$(node -v)"
   have nvim     && printf '  nvim:      %s\n' "$(nvim --version | head -n1)"
   have starship && printf '  starship:  %s\n' "$(starship --version | head -n1)"
-  have difft    && printf '  difft:     %s\n' "$(difft --version 2>/dev/null || echo installed)"
-  have yazi     && printf '  yazi:      %s\n' "$(yazi --version 2>/dev/null || echo installed)"
+  have difft    && printf '  difft:     %s\n' "$(difft --version)"
+  have yazi     && printf '  yazi:      %s\n' "$(yazi --version)"
 }
 main "$@"
