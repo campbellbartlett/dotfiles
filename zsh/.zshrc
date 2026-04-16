@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Zsh configuration — generic base (no work-specific references)
+# Zsh configuration
 # ---------------------------------------------------------------------------
 
 # History
@@ -181,7 +181,15 @@ precmd() { termtitle precmd }
 preexec() { termtitle preexec "${(V)1}" }
 
 # ---------------------------------------------------------------------------
-# Drop-in overrides (e.g. work-specific config)
+# Drop-in overrides
 # Source all *.zsh files from ~/.zshrc.d/ if the directory exists.
 # ---------------------------------------------------------------------------
 for f in ~/.zshrc.d/*.zsh(N); do source "$f"; done
+
+# pnpm
+export PNPM_HOME="/home/coder/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
