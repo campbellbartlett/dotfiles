@@ -396,6 +396,13 @@ function padRight(s: string, width: number): string {
   return vis < width ? s + " ".repeat(width - vis) : s;
 }
 
+// Truncate a plain (no ANSI) string from the left, keeping the tail.
+// "…/file/server/rpc" is more useful than "file_server/src/main/ja…"
+function truncateLeft(s: string, width: number): string {
+  if (s.length <= width) return s;
+  return "\u2026" + s.slice(-(width - 1));
+}
+
 class FilePickerModal {
   private query = "";
   private allFiles: FileEntry[] = [];
@@ -667,7 +674,9 @@ class FilePickerModal {
             ? truncateToWidth(item.basename, nameCols - 1, "…")
             : item.basename;
         const namePadded = padRight(nameTrunc, nameCols);
-        const dirTrunc = truncateToWidth(dir, dirCols, "");
+        // Left-truncate the directory so the end of the path (closest to the
+        // filename) is always visible rather than the repo root.
+        const dirTrunc = truncateLeft(dir, dirCols);
 
         let line: string;
         if (isSelected) {
@@ -691,6 +700,14 @@ class FilePickerModal {
     }
 
     lines.push(sep);
+
+    // ── Selected path (full path of the highlighted item) ──
+    // Shown above the help line so you can always read the complete path
+    // regardless of how narrow the window is.
+    const selectedItem = this.displayed[this.selectedIdx];
+    if (selectedItem) {
+      lines.push(truncateToWidth(t.fg("muted", `  ${selectedItem.path}`), width));
+    }
 
     // ── Help ──
     lines.push(t.fg("dim", "  ↑↓ navigate  enter select  esc cancel  ctrl+u clear  'exact  ^prefix  suffix$  !negate"));
