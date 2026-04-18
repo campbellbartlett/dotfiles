@@ -11,6 +11,10 @@ HISTSIZE=50000
 SAVEHIST=50000
 HISTFILE=~/.zsh_history
 
+# Editor
+export EDITOR="nvim"
+export VISUAL="nvim"
+
 # Use emacs keybindings even if EDITOR is set to vi
 bindkey -e
 
