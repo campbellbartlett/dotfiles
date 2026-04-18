@@ -18,7 +18,9 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { CustomEditor } from "@mariozechner/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FZF scoring algorithm — ported from snacks.nvim (which ported it from fzf)
@@ -290,14 +292,45 @@ function scoreEntry(entry: FileEntry, tokens: ParsedToken[]): number {
 // File enumeration using fd (streaming, batched)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function resolveWorkingFd(): string | undefined {
+  const pathValue = process.env.PATH ?? "";
+  const candidates: string[] = [];
+
+  for (const dir of pathValue.split(delimiter).filter(Boolean)) {
+    const candidate = join(dir, "fd");
+    if (existsSync(candidate) && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  }
+
+  if (!candidates.includes("fd")) candidates.push("fd");
+
+  for (const candidate of candidates) {
+    try {
+      const result = spawnSync(candidate, ["--version"], { stdio: "pipe", encoding: "utf8" });
+      if (result.status === 0) return candidate;
+    } catch {}
+  }
+
+  return undefined;
+}
+
 function enumerateFiles(
   cwd: string,
   onBatch: (files: string[]) => void,
   onDone: () => void,
   signal: AbortSignal,
+  onError?: (message: string) => void,
 ): void {
+  const fdCommand = resolveWorkingFd();
+  if (!fdCommand) {
+    onError?.("File picker needs a working 'fd' binary, but none was found on PATH.");
+    onDone();
+    return;
+  }
+
   const child = spawn(
-    "fd",
+    fdCommand,
     [
       "--type", "f",
       "--type", "l", // include symlinks to files
@@ -356,17 +389,23 @@ function enumerateFiles(
     }
   });
 
-  child.on("close", () => {
+  child.on("close", (code) => {
     if (flushTimer) {
       clearTimeout(flushTimer);
       flushTimer = null;
     }
     if (buf.trim()) batch.push(buf.trim());
     flush();
+    if (!signal.aborted && code && code !== 0 && batch.length === 0) {
+      onError?.(`File picker failed to run '${fdCommand}' (exit code ${code}).`);
+    }
     onDone();
   });
 
-  child.on("error", () => onDone());
+  child.on("error", (error) => {
+    onError?.(`File picker failed to start '${fdCommand}': ${error.message}`);
+    onDone();
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -410,6 +449,7 @@ class FilePickerModal {
   private selectedIdx = 0;
   private scrollOffset = 0;
   private isLoading = true;
+  private errorMessage?: string;
   private cachedWidth?: number;
   private cachedLines?: string[];
 
@@ -433,6 +473,7 @@ class FilePickerModal {
     private theme: Theme,
     cwd: string,
     signal: AbortSignal,
+    onWarning?: (message: string) => void,
   ) {
     enumerateFiles(
       cwd,
@@ -456,6 +497,13 @@ class FilePickerModal {
         this.scheduleRefilter(0);
       },
       signal,
+      (message) => {
+        this.errorMessage = message;
+        this.isLoading = false;
+        this.invalidate();
+        this.tui.requestRender();
+        onWarning?.(message);
+      },
     );
   }
 
@@ -647,7 +695,9 @@ class FilePickerModal {
     lines.push(truncateToWidth(t.fg("dim", statusLine), width));
 
     // ── Results ──
-    if (this.displayed.length === 0 && !this.isLoading) {
+    if (this.errorMessage) {
+      lines.push(t.fg("warning", `  ${this.errorMessage}`));
+    } else if (this.displayed.length === 0 && !this.isLoading) {
       lines.push(t.fg("warning", "  (no matches)"));
     } else {
       // Column widths: 3 prefix | N filename | 2 gap | rest dirname
@@ -810,6 +860,7 @@ export default function (pi: ExtensionAPI) {
                   overlayTheme,
                   ctx.cwd,
                   ac.signal,
+                  (message) => ctx.ui.notify(message, "warning"),
                 );
                 modal.onSelect = (path) => {
                   ac.abort();
