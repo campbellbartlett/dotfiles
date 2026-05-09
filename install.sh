@@ -91,6 +91,44 @@ install_base_helpers() {
   esac
 }
 
+install_java_bazel() {
+  log "Installing Java 21 and Bazel 8"
+
+  case "$PKG_MANAGER" in
+    nix)
+      nix profile install nixpkgs#jdk21 nixpkgs#bazel_8
+      ;;
+    apt)
+      local bazel_version
+
+      need_sudo mkdir -p /etc/apt/keyrings
+
+      curl -fsSL https://bazel.build/bazel-release.pub.gpg |
+        gpg --dearmor |
+        need_sudo tee /etc/apt/keyrings/bazel-archive-keyring.gpg >/dev/null
+
+      echo "deb [signed-by=/etc/apt/keyrings/bazel-archive-keyring.gpg] https://storage.googleapis.com/bazel-apt stable jdk1.8" |
+        need_sudo tee /etc/apt/sources.list.d/bazel.list >/dev/null
+
+      # Refresh again after adding the Bazel apt repository.
+      apt_updated=false
+      ensure_apt_updated
+
+      bazel_version="${BAZEL_VERSION:-}"
+      if [[ -z "$bazel_version" ]]; then
+        bazel_version="$(apt-cache madison bazel | awk '{print $3}' | grep -E '^8\.' | sort -Vr | head -n1)"
+      fi
+
+      if [[ -z "$bazel_version" ]]; then
+        echo "Could not find a Bazel 8 package in apt" >&2
+        return 1
+      fi
+
+      need_sudo apt-get install -y openjdk-21-jdk "bazel=${bazel_version}"
+      ;;
+  esac
+}
+
 install_gh() {
   if have gh; then
     log "gh already installed"
@@ -305,9 +343,9 @@ install_pi() {
       export PNPM_HOME="${HOME}/.local/share/pnpm"
       export PATH="$PNPM_HOME:$PATH"
     fi
-    pnpm install -g @mariozechner/pi-coding-agent
+    sudo pnpm install -g @mariozechner/pi-coding-agent
   else
-    npm install -g @mariozechner/pi-coding-agent
+    sudo npm install -g @mariozechner/pi-coding-agent
   fi
 }
 
@@ -395,7 +433,7 @@ set_default_shell() {
   if [[ ! -f /etc/shells ]] || ! grep -qxF "$zsh_path" /etc/shells; then
     echo "$zsh_path" | need_sudo tee -a /etc/shells >/dev/null
   fi
-  chsh -s "$zsh_path"
+  sudo chsh -s "$zsh_path"
 }
 
 # ---------------------------------------------------------------------------
@@ -476,6 +514,7 @@ main() {
   else
     detect_pkg_manager
     install_base_helpers
+    install_java_bazel
     install_gh
     install_nodejs
     install_nvim
@@ -495,6 +534,8 @@ main() {
   printf 'Versions:\n'
   have gh       && printf '  gh:        %s\n' "$(gh --version | head -n1)"
   have node     && printf '  node:      %s\n' "$(node -v)"
+  have java     && printf '  java:      %s\n' "$(java -version 2>&1 | head -n1)"
+  have bazel    && printf '  bazel:     %s\n' "$(bazel --version)"
   have nvim     && printf '  nvim:      %s\n' "$(nvim --version | head -n1)"
   have starship && printf '  starship:  %s\n' "$(starship --version | head -n1)"
   have difft    && printf '  difft:     %s\n' "$(difft --version)"
