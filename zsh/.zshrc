@@ -191,9 +191,9 @@ preexec() { termtitle preexec "${(V)1}" }
 for f in ~/.zshrc.d/*.zsh(N); do source "$f"; done
 
 # pnpm
-export PNPM_HOME="/home/coder/.local/share/pnpm"
+export PNPM_HOME="/home/vscode/.local/share/pnpm"
 case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
+  *":$PNPM_HOME/bin:"*) ;;
+  *) export PATH="$PNPM_HOME/bin:$PATH" ;;
 esac
 # pnpm end
