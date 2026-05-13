@@ -324,6 +324,8 @@ install_tpm() {
 }
 
 install_pi() {
+  local pi_package
+
   if have pi; then
     log "pi already installed"
     return
@@ -334,7 +336,9 @@ install_pi() {
     return 1
   fi
 
-  log "Installing pi coding agent"
+  pi_package="${PI_NPM_PACKAGE:-@earendil-works/pi-coding-agent}"
+
+  log "Installing pi coding agent: ${pi_package}"
 
   if have pnpm; then
     # Ensure PNPM_HOME and global bin dir are configured
@@ -343,9 +347,9 @@ install_pi() {
       export PNPM_HOME="${HOME}/.local/share/pnpm"
       export PATH="$PNPM_HOME:$PATH"
     fi
-    sudo pnpm install -g @mariozechner/pi-coding-agent
+    need_sudo pnpm install -g "${pi_package}"
   else
-    sudo npm install -g @mariozechner/pi-coding-agent
+    need_sudo npm install -g "${pi_package}"
   fi
 }
 
