@@ -25,7 +25,7 @@ DOTFILES_SKIP_PACKAGES="${DOTFILES_SKIP_PACKAGES:-0}"
 # ---------------------------------------------------------------------------
 # Package manager abstraction
 # ---------------------------------------------------------------------------
-# Prefer nix if available (e.g. Canva devboxes), fall back to apt.
+# Prefer nix if available, otherwise fall back to apt.
 
 PKG_MANAGER=""
 
@@ -85,7 +85,7 @@ install_base_helpers() {
     apt)
       ensure_apt_updated
       need_sudo apt-get install -y \
-        bc build-essential file imagemagick bubblewrap ca-certificates curl git gpg stow \
+        bc build-essential bubblewrap ca-certificates curl git gpg stow \
         tmux ripgrep unzip xz-utils zsh zsh-autosuggestions zsh-syntax-highlighting
       ;;
   esac
@@ -324,8 +324,6 @@ install_tpm() {
 }
 
 install_pi() {
-  local pi_package
-
   if have pi; then
     log "pi already installed"
     return
@@ -336,9 +334,7 @@ install_pi() {
     return 1
   fi
 
-  pi_package="${PI_NPM_PACKAGE:-@earendil-works/pi-coding-agent}"
-
-  log "Installing pi coding agent: ${pi_package}"
+  log "Installing pi coding agent"
 
   if have pnpm; then
     # Ensure PNPM_HOME and global bin dir are configured
@@ -347,9 +343,9 @@ install_pi() {
       export PNPM_HOME="${HOME}/.local/share/pnpm"
       export PATH="$PNPM_HOME:$PATH"
     fi
-    need_sudo pnpm install -g "${pi_package}"
+    sudo pnpm install -g @mariozechner/pi-coding-agent
   else
-    need_sudo npm install -g "${pi_package}"
+    sudo npm install -g @mariozechner/pi-coding-agent
   fi
 }
 
@@ -545,4 +541,3 @@ main() {
   have difft    && printf '  difft:     %s\n' "$(difft --version)"
   have yazi     && printf '  yazi:      %s\n' "$(yazi --version)"
 }
-main "$@"

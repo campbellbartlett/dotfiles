@@ -15,6 +15,10 @@ HISTFILE=~/.zsh_history
 export EDITOR="nvim"
 export VISUAL="nvim"
 
+# Force Snacks.nvim image rendering to use the Kitty graphics protocol.
+# Needed because this terminal supports it, but Snacks doesn't auto-detect it here.
+export SNACKS_KITTY=1
+
 # Use emacs keybindings even if EDITOR is set to vi
 bindkey -e
 
