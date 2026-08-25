@@ -50,11 +50,20 @@ zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
 # ---------------------------------------------------------------------------
 export PATH="$HOME/.local/bin:$PATH"
 
-export PNPM_HOME="$HOME/.local/share/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
+# pnpm keeps its global store under ~/Library on macOS, ~/.local/share on Linux.
+if [[ "$OSTYPE" == darwin* ]]; then
+  export PNPM_HOME="$HOME/Library/pnpm"
+else
+  export PNPM_HOME="$HOME/.local/share/pnpm"
+fi
+# pnpm >=10 uses $PNPM_HOME/bin; older versions used $PNPM_HOME directly.
+for _pnpm_bin in "$PNPM_HOME/bin" "$PNPM_HOME"; do
+  case ":$PATH:" in
+    *":$_pnpm_bin:"*) ;;
+    *) export PATH="$_pnpm_bin:$PATH" ;;
+  esac
+done
+unset _pnpm_bin
 
 # ---------------------------------------------------------------------------
 # Aliases
@@ -194,10 +203,5 @@ preexec() { termtitle preexec "${(V)1}" }
 # ---------------------------------------------------------------------------
 for f in ~/.zshrc.d/*.zsh(N); do source "$f"; done
 
-# pnpm
-export PNPM_HOME="/home/vscode/.local/share/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME/bin:"*) ;;
-  *) export PATH="$PNPM_HOME/bin:$PATH" ;;
-esac
-# pnpm end
+# License Vault URL for activation of Jetbrains products at Canva
+export JETBRAINS_LICENSE_SERVER=https://canva.fls.jetbrains.com/

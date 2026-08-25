@@ -23,7 +23,7 @@ chmod +x install.sh
 
 `install.sh` is idempotent — safe to run multiple times. By default it will:
 
-1. Install base packages (via nix or apt, whichever is available)
+1. Install base packages (via nix, Homebrew, or apt, whichever is available)
 2. Install tools: gh, node, neovim, starship, difftastic, yazi, tmux TPM
 3. Set zsh as default shell
 4. Symlink all config via `stow`
@@ -76,6 +76,6 @@ starship/.config/   → ~/.config/starship.toml
 
 ## Requirements
 
-- Linux system with nix or apt (nix is preferred if available)
-- `sudo` access for package installation (apt only)
+- Linux system with nix or apt (nix is preferred if available), or macOS with Homebrew
+- `sudo` access for package installation (apt/macOS shell change only)
 - Git and curl (install.sh will handle the rest)

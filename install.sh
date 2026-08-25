@@ -32,10 +32,12 @@ PKG_MANAGER=""
 detect_pkg_manager() {
   if have nix-env; then
     PKG_MANAGER="nix"
+  elif have brew; then
+    PKG_MANAGER="brew"
   elif have apt-get; then
     PKG_MANAGER="apt"
   else
-    echo "No supported package manager found (need nix or apt)" >&2
+    echo "No supported package manager found (need nix, brew, or apt)" >&2
     exit 1
   fi
   log "Using package manager: $PKG_MANAGER"
@@ -87,6 +89,10 @@ install_base_helpers() {
       need_sudo apt-get install -y \
         bc build-essential file imagemagick bubblewrap ca-certificates curl git gpg stow \
         tmux ripgrep unzip xz-utils zsh zsh-autosuggestions zsh-syntax-highlighting
+      ;;
+    brew)
+      brew install git curl wget stow ripgrep tmux tree-sitter imagemagick \
+        zsh-autosuggestions zsh-syntax-highlighting
       ;;
   esac
 }
@@ -155,6 +161,9 @@ install_gh() {
       ensure_apt_updated
       need_sudo apt-get install -y gh
       ;;
+    brew)
+      brew install gh
+      ;;
   esac
 }
 
@@ -192,6 +201,9 @@ install_starship() {
       ;;
     apt)
       curl -sS https://starship.rs/install.sh | sh -s -- -y
+      ;;
+    brew)
+      brew install starship
       ;;
   esac
 }
@@ -244,6 +256,9 @@ install_nvim() {
       rm -rf "$tmpdir"
       trap - RETURN
       ;;
+    brew)
+      brew install neovim
+      ;;
   esac
 }
 
@@ -287,6 +302,9 @@ install_difftastic() {
 
       rm -rf "$tmpdir"
       trap - RETURN
+      ;;
+    brew)
+      brew install difftastic
       ;;
   esac
 }
@@ -341,15 +359,24 @@ install_pi() {
   log "Installing pi coding agent: ${pi_package}"
 
   if have pnpm; then
-    # Ensure PNPM_HOME and global bin dir are configured
+    # Install into a user-owned prefix. Running this under sudo would drop
+    # PNPM_HOME from the environment and send pnpm to /usr/local/bin, which
+    # root owns but the shell's PATH doesn't prefer.
     if [[ -z "${PNPM_HOME:-}" ]]; then
-      pnpm setup
-      export PNPM_HOME="${HOME}/.local/share/pnpm"
-      export PATH="$PNPM_HOME:$PATH"
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        export PNPM_HOME="${HOME}/Library/pnpm"
+      else
+        export PNPM_HOME="${HOME}/.local/share/pnpm"
+      fi
     fi
-    need_sudo pnpm install -g "${pi_package}"
+    # pnpm >=10 places the global bin at $PNPM_HOME/bin; older versions used
+    # $PNPM_HOME directly. Put both on PATH so the preflight check passes.
+    mkdir -p "$PNPM_HOME/bin"
+    export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
+    pnpm install -g "${pi_package}"
   else
-    need_sudo npm install -g "${pi_package}"
+    # npm's default prefix is root-owned; point it at ~/.local instead.
+    npm install -g --prefix "${HOME}/.local" "${pi_package}"
   fi
 }
 
@@ -417,6 +444,9 @@ install_yazi() {
       rm -rf "$tmpdir"
       trap - RETURN
       ;;
+    brew)
+      brew install yazi
+      ;;
   esac
 }
 
@@ -425,10 +455,16 @@ set_default_shell() {
     return
   fi
 
-  local zsh_path
+  local zsh_path current_shell
   zsh_path="$(command -v zsh)"
 
-  if [[ "$(getent passwd "$(whoami)" | cut -d: -f7)" == "$zsh_path" ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    current_shell="$(dscl . -read "/Users/$(whoami)" UserShell 2>/dev/null | awk '{print $2}')"
+  else
+    current_shell="$(getent passwd "$(whoami)" | cut -d: -f7)"
+  fi
+
+  if [[ "$current_shell" == "$zsh_path" ]]; then
     log "zsh is already the default shell"
     return
   fi
